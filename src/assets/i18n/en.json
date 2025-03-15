@@ -1,0 +1,15 @@
+{
+  "TITLE": {
+    "APP": "Angular Electron"
+  },
+  "PAGES": {
+    "HOME": {
+      "TITLE": "Home",
+      "DESCRIPTION": "Welcome to Angular Electron! This is a modern desktop application built with Angular 19 and Electron 35."
+    },
+    "DETAIL": {
+      "TITLE": "Detail",
+      "DESCRIPTION": "This is the detail page of the application. You can customize this content as needed."
+    }
+  }
+}
