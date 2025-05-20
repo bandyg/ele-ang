@@ -1,7 +1,20 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  Input,
+  ElementRef,
+  ViewChild,
+  AfterViewInit,
+  AfterViewChecked,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CartService } from '../../services/cart.service';
 import { CartItem } from '../../models/cart-item.model';
+import {
+  CartConfig,
+  DEFAULT_CART_CONFIG,
+} from '../../models/cart-config.model';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -12,12 +25,25 @@ import { Subscription } from 'rxjs';
     <div
       class="cart-container"
       [class.expanded]="isExpanded"
-      [style.top.px]="position.y"
-      [style.left.px]="position.x"
+      [class.fixed]="config.fixed"
+      [ngClass]="getPositionClass()"
+      [style.top.px]="getTopPosition()"
+      [style.bottom.px]="getBottomPosition()"
+      [style.left.px]="getLeftPosition()"
+      [style.right.px]="getRightPosition()"
+      [style.width.px]="getWidth()"
+      [style.height]="getHeight()"
+      [style.border-radius.px]="config.borderRadius"
+      [style.background-color]="config.secondaryColor"
       #cartContainer
     >
       <!-- Cart header and drag handle -->
-      <div class="cart-header" (mousedown)="startDrag($event)">
+      <div
+        class="cart-header"
+        [style.background-color]="config.primaryColor"
+        [style.height.px]="config.collapsedSize?.height"
+        (mousedown)="config.fixed ? null : startDrag($event)"
+      >
         <div class="cart-icon" (click)="handleCartIconClick($event)">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -25,7 +51,7 @@ import { Subscription } from 'rxjs';
             height="24"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="currentColor"
+            [attr.stroke]="config.iconColor"
             stroke-width="2"
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -36,21 +62,41 @@ import { Subscription } from 'rxjs';
               d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"
             ></path>
           </svg>
-          <span *ngIf="cartCount > 0" class="badge">{{ cartCount }}</span>
+          <span
+            *ngIf="cartCount > 0"
+            class="badge"
+            [style.background-color]="config.badgeColor"
+          >
+            {{ cartCount }}
+          </span>
         </div>
       </div>
 
       <!-- Cart content -->
-      <div class="cart-content" *ngIf="isExpanded">
+      <div
+        class="cart-content"
+        *ngIf="isExpanded"
+        [ngClass]="'expand-' + config.expandDirection"
+      >
         <h3>Shopping Cart</h3>
 
         <div *ngIf="flattenedCartItems.length === 0" class="empty-cart">
-          Your cart is empty
+          {{ config.emptyCartText }}
         </div>
 
         <div *ngIf="flattenedCartItems.length > 0" class="cart-items-container">
-          <!-- Scrollable item list -->
-          <div class="cart-items-list">
+          <button
+            class="arrow-btn up"
+            (click)="scrollUp()"
+            [disabled]="!canScrollUp"
+          >
+            ▲
+          </button>
+          <div
+            class="cart-items-list"
+            #cartItemsList
+            (scroll)="updateScrollButtons()"
+          >
             <div
               *ngFor="let item of flattenedCartItems; let i = index"
               class="cart-item"
@@ -59,21 +105,35 @@ import { Subscription } from 'rxjs';
                 <h4>{{ item.name }}</h4>
                 <p class="price">{{ item.price | currency }}</p>
               </div>
-              <button class="remove-btn" (click)="removeItemAtIndex(i)">
+              <button
+                class="remove-btn"
+                (click)="removeItemAtIndex(i)"
+                [style.color]="config.badgeColor"
+              >
                 ×
               </button>
             </div>
           </div>
-
-          <!-- Fixed footer with total and checkout -->
+          <button
+            class="arrow-btn down"
+            (click)="scrollDown()"
+            [disabled]="!canScrollDown"
+          >
+            ▼
+          </button>
           <div class="cart-footer">
             <div class="cart-total">
-              <span>Total:</span>
+              <span>{{ config.totalText }}</span>
               <span>{{ calculateTotal() | currency }}</span>
             </div>
 
-            <button class="checkout-btn" (click)="showPaymentMethods()">
-              Checkout
+            <button
+              *ngIf="config.showCheckoutButton"
+              class="checkout-btn"
+              (click)="showPaymentMethods()"
+              [style.background-color]="config.primaryColor"
+            >
+              {{ config.checkoutButtonText }}
             </button>
           </div>
         </div>
@@ -95,7 +155,7 @@ import { Subscription } from 'rxjs';
 
           <div class="payment-methods">
             <div
-              *ngFor="let method of paymentMethods"
+              *ngFor="let method of config.paymentMethods"
               class="payment-method-item"
               [class.selected]="selectedPaymentMethod === method.id"
               (click)="selectPaymentMethod(method.id)"
@@ -118,6 +178,7 @@ import { Subscription } from 'rxjs';
               class="pay-btn"
               [disabled]="!selectedPaymentMethod"
               (click)="processPayment()"
+              [style.background-color]="config.primaryColor"
             >
               Pay Now
             </button>
@@ -131,36 +192,54 @@ import { Subscription } from 'rxjs';
       .cart-container {
         position: fixed;
         z-index: 1000;
-        background-color: white;
-        border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        transition: width 0.3s, height 0.3s;
+        transition: all 0.3s;
         cursor: move;
-        width: 60px;
-        height: 60px;
         overflow: hidden;
+        box-sizing: border-box;
+      }
+
+      .cart-container.fixed {
+        cursor: default;
+      }
+
+      .cart-container.position-top-left {
+        top: 20px;
+        left: 20px;
+      }
+
+      .cart-container.position-top-right {
+        top: 20px;
+        right: 20px;
+      }
+
+      .cart-container.position-bottom-left {
+        bottom: 20px;
+        left: 20px;
+      }
+
+      .cart-container.position-bottom-right {
+        bottom: 20px;
+        right: 20px;
       }
 
       .cart-container.expanded {
-        width: 320px;
-        height: auto;
-        max-height: calc(
-          50vh + 60px
-        ); /* 50% of viewport height plus header height */
         display: flex;
         flex-direction: column;
         cursor: default;
       }
 
       .cart-header {
-        height: 60px;
         display: flex;
         align-items: center;
         justify-content: center;
-        background-color: #4a90e2;
         color: white;
         cursor: move;
         flex-shrink: 0;
+      }
+
+      .fixed .cart-header {
+        cursor: default;
       }
 
       .cart-icon {
@@ -168,8 +247,8 @@ import { Subscription } from 'rxjs';
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 60px;
-        height: 60px;
+        width: 100%;
+        height: 100%;
         cursor: pointer;
       }
 
@@ -177,7 +256,6 @@ import { Subscription } from 'rxjs';
         position: absolute;
         top: 2px;
         right: 2px;
-        background-color: #ff4757;
         color: white;
         border-radius: 50%;
         min-width: 20px;
@@ -195,6 +273,23 @@ import { Subscription } from 'rxjs';
         flex-direction: column;
         flex-grow: 1;
         overflow: hidden;
+      }
+
+      /* 展开方向样式 */
+      .expand-up {
+        transform-origin: bottom center;
+      }
+
+      .expand-down {
+        transform-origin: top center;
+      }
+
+      .expand-left {
+        transform-origin: right center;
+      }
+
+      .expand-right {
+        transform-origin: left center;
       }
 
       .cart-content h3 {
@@ -224,9 +319,11 @@ import { Subscription } from 'rxjs';
         gap: 12px;
         overflow-y: auto;
         flex-grow: 1;
-        max-height: calc(
-          50vh - 140px
-        ); /* 50% of viewport height minus space for header, title, and footer */
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE 10+ */
+      }
+      .cart-items-list::-webkit-scrollbar {
+        display: none; /* Chrome/Safari/Webkit */
       }
 
       .cart-item {
@@ -254,7 +351,6 @@ import { Subscription } from 'rxjs';
       .remove-btn {
         background: none;
         border: none;
-        color: #ff4757;
         font-size: 20px;
         cursor: pointer;
         padding: 0 8px;
@@ -277,7 +373,6 @@ import { Subscription } from 'rxjs';
       .checkout-btn {
         width: 100%;
         padding: 12px;
-        background-color: #4a90e2;
         color: white;
         border: none;
         border-radius: 4px;
@@ -287,7 +382,7 @@ import { Subscription } from 'rxjs';
       }
 
       .checkout-btn:hover {
-        background-color: #357abd;
+        opacity: 0.9;
       }
 
       /* Payment Modal Styles */
@@ -408,7 +503,6 @@ import { Subscription } from 'rxjs';
 
       .pay-btn {
         padding: 10px 24px;
-        background-color: #4a90e2;
         color: white;
         border: none;
         border-radius: 4px;
@@ -420,10 +514,42 @@ import { Subscription } from 'rxjs';
         background-color: #cccccc;
         cursor: not-allowed;
       }
+
+      .arrow-btn {
+        width: 100%;
+        background: #f1f1f1;
+        border: none;
+        color: #4a90e2;
+        font-size: 18px;
+        padding: 4px 0;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .arrow-btn:disabled {
+        color: #ccc;
+        background: #f5f5f5;
+        opacity: 0.6;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+
+      .arrow-btn.up {
+        border-radius: 6px 6px 0 0;
+      }
+
+      .arrow-btn.down {
+        border-radius: 0 0 6px 6px;
+      }
     `,
   ],
 })
-export class ShoppingCartComponent implements OnInit, OnDestroy {
+export class ShoppingCartComponent
+  implements OnInit, OnDestroy, AfterViewInit, AfterViewChecked
+{
+  @Input() config: CartConfig = DEFAULT_CART_CONFIG;
+  @ViewChild('cartItemsList', { static: false }) cartItemsListRef: any;
+
   cartItems: CartItem[] = [];
   flattenedCartItems: CartItem[] = [];
   cartCount: number = 0;
@@ -432,46 +558,38 @@ export class ShoppingCartComponent implements OnInit, OnDestroy {
   // Payment modal properties
   showPaymentModal: boolean = false;
   selectedPaymentMethod: string | null = null;
-  paymentMethods = [
-    {
-      id: 'cash_voucher',
-      name: 'Cash Voucher',
-      description: 'Pay with cash voucher',
-      icon: 'assets/icons/credit-card.svg',
-    },
-    {
-      id: 'ewallet',
-      name: 'eWallet',
-      description: 'Fast and secure payment',
-      icon: 'assets/icons/paypal.svg',
-    },
-    {
-      id: 'alipay_hk',
-      name: 'Alipay HK',
-      description: 'Chinese payment platform',
-      icon: 'assets/icons/alipay.svg',
-    },
-    {
-      id: 'wechat_pay_hk',
-      name: 'WeChat Pay HK',
-      description: 'Pay with WeChat',
-      icon: 'assets/icons/wechat-pay.svg',
-    },
-  ];
 
-  position = {
-    x: 20,
-    y: 20,
-  };
+  position: { x: number; y: number } = { x: 20, y: 20 };
 
   private dragging = false;
   private dragOffset = { x: 0, y: 0 };
   private subscriptions: Subscription[] = [];
   private isDragged = false;
+  scrollAmount = 80;
+  canScrollUp = false;
+  canScrollDown = false;
 
-  constructor(private cartService: CartService) {}
+  constructor(
+    private cartService: CartService,
+    private elementRef: ElementRef
+  ) {}
 
   ngOnInit(): void {
+    // 合并默认配置和用户配置
+    this.config = { ...DEFAULT_CART_CONFIG, ...this.config };
+
+    // 设置初始位置
+    if (this.config.initialPosition) {
+      this.position = {
+        x: this.config.initialPosition.x || 20,
+        y: this.config.initialPosition.y || 20,
+      };
+    }
+
+    // 设置初始展开状态
+    this.isExpanded = this.config.initialExpanded || false;
+
+    // 订阅购物车服务
     this.subscriptions.push(
       this.cartService.getCartItems().subscribe((items) => {
         this.cartItems = items;
@@ -483,18 +601,136 @@ export class ShoppingCartComponent implements OnInit, OnDestroy {
       })
     );
 
-    // Add mouse move and up listeners for dragging
-    window.addEventListener('mousemove', this.onMouseMove.bind(this));
-    window.addEventListener('mouseup', this.onMouseUp.bind(this));
+    // 拖拽事件监听器
+    if (!this.config.fixed) {
+      window.addEventListener('mousemove', this.onMouseMove.bind(this));
+      window.addEventListener('mouseup', this.onMouseUp.bind(this));
+    }
+
+    // 点击外部自动折叠
+    if (this.config.autoCollapse) {
+      window.addEventListener('click', this.onOutsideClick.bind(this));
+    }
   }
 
   ngOnDestroy(): void {
-    // Clean up subscriptions
+    // 清理订阅
     this.subscriptions.forEach((sub) => sub.unsubscribe());
 
-    // Remove event listeners
-    window.removeEventListener('mousemove', this.onMouseMove.bind(this));
-    window.removeEventListener('mouseup', this.onMouseUp.bind(this));
+    // 移除事件监听器
+    if (!this.config.fixed) {
+      window.removeEventListener('mousemove', this.onMouseMove.bind(this));
+      window.removeEventListener('mouseup', this.onMouseUp.bind(this));
+    }
+
+    if (this.config.autoCollapse) {
+      window.removeEventListener('click', this.onOutsideClick.bind(this));
+    }
+  }
+
+  ngAfterViewInit(): void {
+    this.updateScrollButtons();
+  }
+
+  ngAfterViewChecked(): void {
+    this.updateScrollButtons();
+  }
+
+  updateScrollButtons(): void {
+    const el = this.cartItemsListRef?.nativeElement;
+    if (!el) return;
+    this.canScrollUp = el.scrollTop > 0;
+    this.canScrollDown = el.scrollTop + el.clientHeight < el.scrollHeight;
+  }
+
+  scrollUp(): void {
+    const el = this.cartItemsListRef?.nativeElement;
+    if (el) {
+      el.scrollBy({ top: -this.scrollAmount, behavior: 'smooth' });
+      setTimeout(() => this.updateScrollButtons(), 300);
+    }
+  }
+
+  scrollDown(): void {
+    const el = this.cartItemsListRef?.nativeElement;
+    if (el) {
+      el.scrollBy({ top: this.scrollAmount, behavior: 'smooth' });
+      setTimeout(() => this.updateScrollButtons(), 300);
+    }
+  }
+
+  // 根据配置获取位置和尺寸
+  getPositionClass(): string {
+    if (this.config.position === 'custom') {
+      return '';
+    }
+    return `position-${this.config.position}`;
+  }
+
+  getTopPosition(): number | null {
+    if (
+      this.config.position === 'bottom-left' ||
+      this.config.position === 'bottom-right'
+    ) {
+      return null;
+    }
+    return this.position.y;
+  }
+
+  getBottomPosition(): number | null {
+    if (
+      this.config.position === 'top-left' ||
+      this.config.position === 'top-right' ||
+      this.config.position === 'custom'
+    ) {
+      return null;
+    }
+    return 20; // 距底部20px
+  }
+
+  getLeftPosition(): number | null {
+    if (
+      this.config.position === 'top-right' ||
+      this.config.position === 'bottom-right'
+    ) {
+      return null;
+    }
+    return this.position.x;
+  }
+
+  getRightPosition(): number | null {
+    if (
+      this.config.position === 'top-left' ||
+      this.config.position === 'bottom-left' ||
+      this.config.position === 'custom'
+    ) {
+      return null;
+    }
+    return 20; // 距右侧20px
+  }
+
+  getWidth(): number {
+    if (this.isExpanded) {
+      return this.config.expandedSize?.width || 320;
+    }
+    return this.config.collapsedSize?.width || 60;
+  }
+
+  getHeight(): string {
+    if (this.isExpanded) {
+      return this.config.expandedSize?.maxHeight || 'calc(50vh + 60px)';
+    }
+    return `${this.config.collapsedSize?.height || 60}px`;
+  }
+
+  // 点击外部自动折叠
+  onOutsideClick(event: MouseEvent): void {
+    if (
+      this.isExpanded &&
+      !this.elementRef.nativeElement.contains(event.target)
+    ) {
+      this.isExpanded = false;
+    }
   }
 
   // Payment methods
@@ -537,7 +773,7 @@ export class ShoppingCartComponent implements OnInit, OnDestroy {
   }
 
   getPaymentMethodName(methodId: string): string {
-    const method = this.paymentMethods.find((m) => m.id === methodId);
+    const method = this.config.paymentMethods?.find((m) => m.id === methodId);
     return method ? method.name : 'Unknown method';
   }
 
@@ -589,6 +825,8 @@ export class ShoppingCartComponent implements OnInit, OnDestroy {
   }
 
   startDrag(event: MouseEvent): void {
+    if (this.config.fixed) return;
+
     // Only initiate drag on header
     if ((event.target as HTMLElement).closest('.cart-header')) {
       this.dragging = true;
@@ -610,8 +848,9 @@ export class ShoppingCartComponent implements OnInit, OnDestroy {
       };
 
       // Ensure cart stays within viewport bounds
-      const maxX = window.innerWidth - 60;
-      const maxY = window.innerHeight - 60;
+      const maxX = window.innerWidth - (this.config.collapsedSize?.width || 60);
+      const maxY =
+        window.innerHeight - (this.config.collapsedSize?.height || 60);
 
       if (this.position.x < 0) this.position.x = 0;
       if (this.position.y < 0) this.position.y = 0;

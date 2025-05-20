@@ -179,3 +179,36 @@ Please refer to [HOW_TO file](./HOW_TO.md)
 [github-star]: https://github.com/maximegris/angular-electron/stargazers
 [twitter]: https://twitter.com/intent/tweet?text=Check%20out%20angular-electron!%20https://github.com/maximegris/angular-electron%20%F0%9F%91%8D
 [twitter-badge]: https://img.shields.io/twitter/url/https/github.com/maximegris/angular-electron.svg?style=social
+
+如果要将这个购物车移植到其他Angular应用中，你需要以下文件:
+模型文件:
+src/app/models/cart-item.model.ts - 购物车项目的接口定义
+服务文件:
+src/app/services/cart.service.ts - 管理购物车数据和操作的服务
+组件文件:
+src/app/components/shopping-cart/shopping-cart.component.ts - 购物车组件本身
+图标文件:
+src/assets/icons/credit-card.svg (现用于Cash Voucher)
+src/assets/icons/paypal.svg (现用于eWallet)
+src/assets/icons/alipay.svg (用于Alipay HK)
+src/assets/icons/wechat-pay.svg (用于WeChat Pay HK)
+移植步骤:
+复制文件:
+将上述所有文件复制到新项目的相同路径结构中。
+检查兼容性:
+确保目标应用也是使用Angular，且版本兼容(这是Angular 16的独立组件)。
+安装依赖:
+确保目标应用有以下依赖:
+@angular/common (提供CommonModule)
+rxjs (用于Observables和Subscriptions)
+导入组件:
+在你想使用购物车的模块或独立组件中导入它:
+Apply to shopping-car...
+使用组件:
+在模板中添加组件标签:
+Apply to shopping-car...
+注入服务:
+如果你需要从其他组件向购物车添加商品，使用CartService:
+Apply to shopping-car...
+由于这是一个独立组件，不需要在任何NgModule中声明，这使得移植过程更加简单。只需确保目标应用支持Angular的独立组件功能。
+如果目标应用使用更早版本的Angular，可能需要调整代码，移除独立组件特性，改为传统的模块化方式。
